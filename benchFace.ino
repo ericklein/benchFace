@@ -38,6 +38,7 @@ uint32_t timeLastSensorSample = 0;
 uint32_t timeLastFaceSeen = 0;
 
 uint8_t rssi = 0; // 0 value used to indicate no WiFi connection
+bool faceSeen = false;
 
 void setup() {
   // handle Serial first so debugMessage() works
@@ -90,23 +91,26 @@ Q - could we ESP light sleep here for a second or two?
       // error, not sure how to handle this yet...
       debugMessage("No person sensor results found on the i2c bus",1);
     else {
-      debugMessage(String(results.num_faces) + " faces detected",1);
-      for (uint8_t loop = 0; loop < results.num_faces; ++loop) {
-        const person_sensor_face_t* face = &results.faces[loop];
-        debugMessage(String("face #") + loop + ": " + face->box_confidence + " confidence (" +
-          face->box_left + ", " + face->box_top + "), (" + face->box_right + ", " + face->box_bottom +
-          + ")",2);
-        if (face->is_facing)
-          debugMessage("facing",2);
-        else
-          debugMessage("not facing",2);
-      digitalWrite(hardwareRelayPin, HIGH);
-      mqttDeviceWiFiUpdate(rssi);
-      mqttDeviceLightUpdate(true);
-      timeLastFaceSeen = millis();
+      if ((results.num_faces) && (!faceSeen)) {
+        debugMessage(String(results.num_faces) + " face(s) detected",1);
+        digitalWrite(hardwareRelayPin, HIGH);
+        mqttDeviceLightUpdate(true);
+        mqttDeviceWiFiUpdate(rssi);
+        for (uint8_t loop = 0; loop < results.num_faces; ++loop) {
+          const person_sensor_face_t* face = &results.faces[loop];
+          debugMessage(String("condfidence in face ") + loop + " is " + face->box_confidence + "%",2);
+          debugMessage(String("face ") + loop + " bounding box is (" + face->box_left + ", " + face->box_top + "), (" + face->box_right + ", " + face->box_bottom +
+            + ")",2);
+          if (face->is_facing)
+            debugMessage("person is facing camera",2);
+          else
+            debugMessage("person is not facing camera",2);
+        }
+        faceSeen = true;
+        timeLastFaceSeen = millis();
       }
+      timeLastSensorSample = millis();
     }
-    timeLastSensorSample = millis();
   }
   // is there a MQTT message to process?
   // ensure we have a connection to MQTT
@@ -117,7 +121,7 @@ Q - could we ESP light sleep here for a second or two?
   else
   {
     // keep the MQTT broker connection active for subscription via ping
-    if((millis() - timeLastMQTTPingTime) > (networkMQTTKeepAliveInterval * 1000))
+    if ((millis() - timeLastMQTTPingTime) > (networkMQTTKeepAliveInterval * 1000))
     {
       timeLastMQTTPingTime = millis();   
       if(bl_mqtt.ping())
@@ -131,18 +135,19 @@ Q - could we ESP light sleep here for a second or two?
     // check to see if there is a status change for the light
     uint8_t status = mqttBenchLightMessage();
 
-    if (status != 2) { // 2 is no message received 
-      debugMessage(String("MQTT message; change light to ") + (status == 1 ? "On" : "Off"),1);
+    if ((status != 2) && (!faceSeen)) { // 2 is no message received 
+      debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
       digitalWrite(hardwareRelayPin, status);
-      timeLastFaceSeen = millis(); // not really true but resets timeout window
     }
   }
+
   // have we seen a face before the timeout window?
-  if((millis() - timeLastFaceSeen) > (faceDetectTimeoutWindow * 1000)) {
+  if (((millis() - timeLastFaceSeen) > (faceDetectTimeoutWindow * 1000)) && (faceSeen)) {
     debugMessage(String("No face seen in ") + faceDetectTimeoutWindow + " seconds, turning off light",1);
     digitalWrite(hardwareRelayPin, LOW);
-    mqttDeviceWiFiUpdate(rssi);
     mqttDeviceLightUpdate(false);
+    mqttDeviceWiFiUpdate(rssi);
+    faceSeen = false;
   }
 }
 
