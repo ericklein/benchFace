@@ -98,13 +98,13 @@ Q - could we ESP light sleep here for a second or two?
         mqttDeviceWiFiUpdate(rssi);
         for (uint8_t loop = 0; loop < results.num_faces; ++loop) {
           const person_sensor_face_t* face = &results.faces[loop];
-          debugMessage(String("condfidence in face ") + loop + " is " + face->box_confidence + "%",2);
+          debugMessage(String("confidence in face ") + loop + " is " + face->box_confidence + "%",2);
           debugMessage(String("face ") + loop + " bounding box is (" + face->box_left + ", " + face->box_top + "), (" + face->box_right + ", " + face->box_bottom +
             + ")",2);
           if (face->is_facing)
-            debugMessage("person is facing camera",2);
+            debugMessage(String("face ") + loop + " is facing camera",2);
           else
-            debugMessage("person is not facing camera",2);
+            debugMessage(String("face ") + loop + " is not facing camera",2);
         }
         faceSeen = true;
         timeLastFaceSeen = millis();

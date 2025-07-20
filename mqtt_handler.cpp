@@ -74,7 +74,7 @@ String generateTopic(char *key)
       
       mqttConnect();
 
-      if (rssiLevelPub.publish(rssi))
+      if (rssiLevelPub.publish((uint32_t)rssi)) // explicitly cast due to compiler ambiguity
       {
         debugMessage("MQTT publish: WiFi RSSI succeeded",2);
         result = true;
@@ -95,13 +95,8 @@ bool mqttDeviceLightUpdate(bool status)
   Adafruit_MQTT_Publish lightPub = Adafruit_MQTT_Publish(&bl_mqtt, topic.c_str());
   
   mqttConnect();
-  // char* value;
-  // if (status)
-  //   value = "On";
-  // else
-  //   value = "Off";
-  if (lightPub.publish(status))
-  //if (lightPub.publish(value))
+
+  if (lightPub.publish((uint32_t)status))
   {
     debugMessage("MQTT publish: light status succeeded",1);
     return true;
@@ -124,6 +119,5 @@ uint8_t mqttBenchLightMessage()
       return (atol((char *)benchLightSub.lastread) == 1) ? 1 : 0;
     }
   }
-  // no message
-  return 2;
+  return 2;  // 2 indicates no message received
 }
