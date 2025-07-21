@@ -57,7 +57,7 @@ String generateTopic(char *key)
 {
   String topic;
   topic = String(DEVICE_SITE) + "/" + String(DEVICE_LOCATION) + "/" + String(DEVICE_ROOM) +
-          "/" + String(DEVICE) + "/" + String(key);
+          "/" + String(DEVICE) + "/" + String(DEVICE_ID) + "/" + String(key);
   debugMessage(String("Generated MQTT topic: ") + topic,2);
   return(topic);
 }

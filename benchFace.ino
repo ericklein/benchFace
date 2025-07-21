@@ -83,35 +83,6 @@ have we seen a face in the specified max window?
 Q - could we ESP light sleep here for a second or two?
 */
 
-  // is it time to look for a face?
-  if((millis() - timeLastSensorSample) >= (sensorSampleInterval * 1000)) // converting sensorSampleInterval into milliseconds
-  {
-    person_sensor_results_t results = {};
-    if (!person_sensor_read(&results))
-      // error, not sure how to handle this yet...
-      debugMessage("No person sensor results found on the i2c bus",1);
-    else {
-      if ((results.num_faces) && (!faceSeen)) {
-        debugMessage(String(results.num_faces) + " face(s) detected",1);
-        digitalWrite(hardwareRelayPin, HIGH);
-        mqttDeviceLightUpdate(true);
-        mqttDeviceWiFiUpdate(rssi);
-        for (uint8_t loop = 0; loop < results.num_faces; ++loop) {
-          const person_sensor_face_t* face = &results.faces[loop];
-          debugMessage(String("confidence in face ") + loop + " is " + face->box_confidence + "%",2);
-          debugMessage(String("face ") + loop + " bounding box is (" + face->box_left + ", " + face->box_top + "), (" + face->box_right + ", " + face->box_bottom +
-            + ")",2);
-          if (face->is_facing)
-            debugMessage(String("face ") + loop + " is facing camera",2);
-          else
-            debugMessage(String("face ") + loop + " is not facing camera",2);
-        }
-        faceSeen = true;
-        timeLastFaceSeen = millis();
-      }
-      timeLastSensorSample = millis();
-    }
-  }
   // is there a MQTT message to process?
   // ensure we have a connection to MQTT
   if (!mqttConnect())
@@ -135,13 +106,47 @@ Q - could we ESP light sleep here for a second or two?
     // check to see if there is a status change for the light
     uint8_t status = mqttBenchLightMessage();
 
-    if ((status != 2) && (!faceSeen)) { // 2 is no message received 
+    if (status != 2) { // 2 is no message received 
       debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
       digitalWrite(hardwareRelayPin, status);
+      if (!status)
+        faceSeen = false; // allows for a person to be detected after a remote override of light state
     }
   }
 
-  // have we seen a face before the timeout window?
+  // is it time to look for a face?
+  if((millis() - timeLastSensorSample) >= (sensorSampleInterval * 1000)) // converting sensorSampleInterval into milliseconds
+  {
+    person_sensor_results_t results = {};
+    if (!person_sensor_read(&results))
+      // error, not sure how to handle this yet...
+      debugMessage("No person sensor results found on the i2c bus",1);
+    else {
+      if (results.num_faces>0) {
+        debugMessage(String(results.num_faces) + " face(s) detected",1);
+        for (uint8_t loop = 0; loop < results.num_faces; ++loop) {
+          const person_sensor_face_t* face = &results.faces[loop];
+          debugMessage(String("confidence in face ") + loop + " is " + face->box_confidence + "%",2);
+          debugMessage(String("face ") + loop + " bounding box is (" + face->box_left + ", " + face->box_top + "), (" + face->box_right + ", " + face->box_bottom +
+            + ")",2);
+          if (face->is_facing)
+            debugMessage(String("face ") + loop + " is facing camera",2);
+          else
+            debugMessage(String("face ") + loop + " is not facing camera",2);
+        }
+        if (!faceSeen) {
+          digitalWrite(hardwareRelayPin, HIGH);
+          mqttDeviceLightUpdate(true);
+          mqttDeviceWiFiUpdate(rssi);
+        }
+        faceSeen = true;
+        timeLastFaceSeen = millis();
+      }
+    }
+    timeLastSensorSample = millis();
+  }
+
+  // have we seen a face inside the timeout window?
   if (((millis() - timeLastFaceSeen) > (faceDetectTimeoutWindow * 1000)) && (faceSeen)) {
     debugMessage(String("No face seen in ") + faceDetectTimeoutWindow + " seconds, turning off light",1);
     digitalWrite(hardwareRelayPin, LOW);
