@@ -13,6 +13,8 @@
 // required external functions and data structures
 extern void debugMessage(String messageText, uint8_t messageLevel);
 
+const uint8_t networkConnectAttemptLimit = 3;
+
 // Status variables shared across various functions
 
 // MQTT setup
@@ -45,7 +47,7 @@ bool mqttConnect()
     // report problem
     bl_mqtt.disconnect();
     debugMessage(String("MQTT connection attempt ") + loop + " of " + networkConnectAttemptLimit + " failed with error msg: " + bl_mqtt.connectErrorString(mqttErr),1);
-    delay(networkConnectAttemptInterval*1000);
+    delay(timeNetworkConnectTimeoutMS);
   }
   // MQTT connection did not happen after multiple attempts
   return false;
