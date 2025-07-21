@@ -33,9 +33,10 @@ extern uint8_t mqttBenchLightMessage();
 
 // Global variables
 // timers
-uint32_t timeLastMQTTPingTime = 0;
-uint32_t timeLastSensorSample = 0;
-uint32_t timeLastFaceSeen = 0;
+uint32_t timeLastMQTTPingMS = 0; 
+uint32_t timeLastSensorSampleMS = 0;
+uint32_t timeLastFaceSeenMS = 0;
+uint32_t timeLastWiFiConnectMS = 0;
 
 uint8_t rssi = 0; // 0 value used to indicate no WiFi connection
 bool faceSeen = false;
@@ -57,31 +58,22 @@ void setup() {
   if (!networkConnect())
   {
     // alert user to the WiFi connectivity problem
-    debugMessage("unable to connect to WiFi",1);
+    debugMessage(String("Connection to ") + WIFI_SSID + " failed", 1);
     //ESP.restart();
   }
-  
+
+  mqttDeviceWiFiUpdate(rssi);
   bl_mqtt.subscribe(&benchLightSub);
 }
 
 void loop() {
 
-/* is it time to look for a face?
- yes - did I find one?
-  yes - turn on the lamp, update MQTT to on, update last_face_seen
-  no - move along in current state
- no - move along in current state
-no
- check to see if there is a MQTT message for the light
-   yes  - is the message for light on?
-     yes - turn it on if it wasn't already, update last_face_seen
-     no - turn the light off # if someone is there, it will immediately turn back on
-   no - move along in current state
-have we seen a face in the specified max window?
-  yes - move along in curren state
-  no - turn off the lamp, update MQTT to off
-Q - could we ESP light sleep here for a second or two?
-*/
+  // re-establish WiFi connection if needed
+  if ((WiFi.status() != WL_CONNECTED) && (millis() - timeLastWiFiConnectMS > timeWiFiKeepAliveIntervalMS)) {
+    timeLastWiFiConnectMS = millis();
+    networkConnect();
+    mqttDeviceWiFiUpdate(rssi);
+  }
 
   // is there a MQTT message to process?
   // ensure we have a connection to MQTT
@@ -91,18 +83,6 @@ Q - could we ESP light sleep here for a second or two?
   }
   else
   {
-    // keep the MQTT broker connection active for subscription via ping
-    if ((millis() - timeLastMQTTPingTime) > (networkMQTTKeepAliveInterval * 1000))
-    {
-      timeLastMQTTPingTime = millis();   
-      if(bl_mqtt.ping())
-        debugMessage("MQTT broker pinged to maintain connection",1);
-      else
-      {
-        debugMessage("unable to ping MQTT broker; disconnected",1);
-        bl_mqtt.disconnect();
-      }
-    }
     // check to see if there is a status change for the light
     uint8_t status = mqttBenchLightMessage();
 
@@ -115,7 +95,7 @@ Q - could we ESP light sleep here for a second or two?
   }
 
   // is it time to look for a face?
-  if((millis() - timeLastSensorSample) >= (sensorSampleInterval * 1000)) // converting sensorSampleInterval into milliseconds
+  if((millis() - timeLastSensorSampleMS) >= sensorSampleIntervalMS)
   {
     person_sensor_results_t results = {};
     if (!person_sensor_read(&results))
@@ -137,21 +117,19 @@ Q - could we ESP light sleep here for a second or two?
         if (!faceSeen) {
           digitalWrite(hardwareRelayPin, HIGH);
           mqttDeviceLightUpdate(true);
-          mqttDeviceWiFiUpdate(rssi);
         }
         faceSeen = true;
-        timeLastFaceSeen = millis();
+        timeLastFaceSeenMS = millis();
       }
     }
-    timeLastSensorSample = millis();
+    timeLastSensorSampleMS = millis();
   }
 
   // have we seen a face inside the timeout window?
-  if (((millis() - timeLastFaceSeen) > (faceDetectTimeoutWindow * 1000)) && (faceSeen)) {
-    debugMessage(String("No face seen in ") + faceDetectTimeoutWindow + " seconds, turning off light",1);
+  if (((millis() - timeLastFaceSeenMS) > faceDetectTimeoutWindowMS) && (faceSeen)) {
+    debugMessage(String("No face seen in ") + faceDetectTimeoutWindowMS + " seconds, turning off light",1);
     digitalWrite(hardwareRelayPin, LOW);
     mqttDeviceLightUpdate(false);
-    mqttDeviceWiFiUpdate(rssi);
     faceSeen = false;
   }
 }
@@ -165,26 +143,27 @@ bool networkConnect()
     debugMessage("Already connected to WiFi",2);
     return true;
   }
-  // set hostname has to come before WiFi.begin
-  WiFi.hostname(DEVICE_ID);
 
+  // set hostname has to come before WiFi.begin
+  WiFi.mode(WIFI_STA); // IMPROVEMENT: test to see if this improves connection time
+  WiFi.hostname(DEVICE_ID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  for (uint8_t loop = 1; loop <= networkConnectAttemptLimit; loop++)
-  // Attempts WiFi connection, and if unsuccessful, re-attempts after networkConnectAttemptInterval second delay for networkConnectAttemptLimit times
-  {
-    if (WiFi.status() == WL_CONNECTED) 
+  uint32_t timeWiFiConnectStart = millis();
+  while ((WiFi.status() != WL_CONNECTED) && ((millis() - timeWiFiConnectStart) < timeNetworkConnectTimeoutMS)) {
+    delay(100);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) 
     {
       rssi = abs(WiFi.RSSI());
       debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
-      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 1);
+      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
       return true;
     }
-    debugMessage(String("Connection attempt ") + loop + " of " + networkConnectAttemptLimit + " to " + WIFI_SSID + " failed", 1);
-    // use of delay() OK as this is initialization code
-    delay(networkConnectAttemptInterval * 1000);  // converted into milliseconds
+  else {
+    return false;
   }
-  return false;
 }
 
 void debugMessage(String messageText, uint8_t messageLevel)

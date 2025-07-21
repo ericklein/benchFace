@@ -7,26 +7,23 @@
 
 // Configuration Step 2: Set debug parameters
 // comment out to turn off; 1 = summary, 2 = verbose
-#define DEBUG 1
+#define DEBUG 2
 
 // Configuration variables that change rarely
 
-// Network
-// max connection attempts to network services
-const uint8_t networkConnectAttemptLimit = 3;
-// time between network service connect attempts
-const uint8_t networkConnectAttemptInterval = 10; // seconds
-// max time before MQTT connection is pinged to keep open
-const uint16_t networkMQTTKeepAliveInterval = 300; // seconds
+// Network timers
+const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 300 seconds to keep alive
+const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
+const uint32_t timeNetworkConnectTimeoutMS = 10000;
 
 // How long to wait between reading the sensor. The sensor can be read as
 // frequently as you like, but the results only change at about 5FPS
-const uint16_t sensorSampleInterval = 5; // seconds
+const uint32_t sensorSampleIntervalMS = 5000;
 
 #ifdef DEBUG
-  const uint16_t faceDetectTimeoutWindow = 30; // seconds
+  const uint32_t faceDetectTimeoutWindowMS = 30000;
 #else
-  const uint16_t faceDetectTimeoutWindow = 300; // seconds
+  const uint32_t faceDetectTimeoutWindowMS = 30000;
 #endif
 
 // Hardware
