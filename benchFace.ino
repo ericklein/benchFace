@@ -54,12 +54,13 @@ void setup() {
 
   pinMode(hardwareRelayPin, OUTPUT);
 
-  // Setup network connection specified in config.h
+  // Setup network connection specified in secrets.h
   if (!networkConnect())
   {
     // alert user to the WiFi connectivity problem
     debugMessage(String("Connection to ") + WIFI_SSID + " failed", 1);
-    //ESP.restart();
+    // IMPROVEMENT: How do we want to handle this? the rest of the code will barf...
+    // ESP.restart();
   }
 
   mqttDeviceWiFiUpdate(rssi);
@@ -71,7 +72,13 @@ void loop() {
   // re-establish WiFi connection if needed
   if ((WiFi.status() != WL_CONNECTED) && (millis() - timeLastWiFiConnectMS > timeWiFiKeepAliveIntervalMS)) {
     timeLastWiFiConnectMS = millis();
-    networkConnect();
+    if (!networkConnect()) {
+      // alert user to the WiFi connectivity problem
+      rssi = 0;
+      debugMessage(String("Connection to ") + WIFI_SSID + " failed", 1);
+      // IMPROVEMENT: How do we want to handle this? the rest of the code will barf...
+      // ESP.restart();
+    }
     mqttDeviceWiFiUpdate(rssi);
   }
 
@@ -92,6 +99,9 @@ void loop() {
       if (!status)
         faceSeen = false; // allows for a person to be detected after a remote override of light state
     }
+    // Question : Do we need to ping the server if we are already querying it regularly?
+    // if(! bl_mqtt.ping()) {
+    //   mqtt.disconnect();
   }
 
   // is it time to look for a face?
@@ -127,7 +137,7 @@ void loop() {
 
   // have we seen a face inside the timeout window?
   if (((millis() - timeLastFaceSeenMS) > faceDetectTimeoutWindowMS) && (faceSeen)) {
-    debugMessage(String("No face seen in ") + faceDetectTimeoutWindowMS + " seconds, turning off light",1);
+    debugMessage(String("No face seen in ") + (faceDetectTimeoutWindowMS/1000) + " seconds, turning off light",1);
     digitalWrite(hardwareRelayPin, LOW);
     mqttDeviceLightUpdate(false);
     faceSeen = false;
@@ -144,8 +154,8 @@ bool networkConnect()
     return true;
   }
 
-  // set hostname has to come before WiFi.begin
   WiFi.mode(WIFI_STA); // IMPROVEMENT: test to see if this improves connection time
+  // set hostname has to come before WiFi.begin
   WiFi.hostname(DEVICE_ID);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
