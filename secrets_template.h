@@ -3,18 +3,13 @@
   Description:    private configuration data template that needs to be saved as secrets.h after github cloning the project
 */
 
-// Configuration Step 1: Set WiFi credentials
-// set the WiFi SSID and password to connect to network (data endpoints)
-#define WIFI_SSID       "key_value"
-#define WIFI_PASS       "key_value"
-
-// Configuration Step 2: If using MQTT, set MQTT broker login parameters
+// Configuration Step 1: If using MQTT, set MQTT broker login parameters
 #define MQTT_BROKER     "mqtt.hostname.local or IP address"
 #define MQTT_PORT       port_number	// use 8883 for SSL
 #define MQTT_USER       "key_value"
 #define MQTT_PASSWORD   "key_value"
 
-// Configuration Step 3: Set key device and installation configuration parameters.  These are used
+// Configuration Step 2: Set key device and installation configuration parameters.  These are used
 // widely throughout the code to properly identify the device and generate important
 // operating elements like MQTT topics, InfluxDB data tags (metadata).  Should be
 // customized to match the target installation. Values here are examples.

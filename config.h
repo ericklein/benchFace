@@ -7,7 +7,7 @@
 
 // Configuration Step 2: Set debug parameters
 // comment out to turn off; 1 = summary, 2 = verbose
-// #define DEBUG 2
+#define DEBUG 2
 
 // Configuration variables that change rarely
 

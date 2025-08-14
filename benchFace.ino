@@ -12,13 +12,11 @@
 #include <Wire.h>
 #include "person_sensor.h"
 
-#if defined (ESP8266)
-  #include <ESP8266WiFi.h>
-#elif defined (ESP32)
-  #include <WiFi.h>
-#endif
+#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
+WiFiManager wm;
 
 // MQTT setup
+
 // MQTT uses WiFiClient class to create TCP connections
 WiFiClient client;
 
@@ -54,32 +52,54 @@ void setup() {
 
   pinMode(hardwareRelayPin, OUTPUT);
 
-  // Setup network connection specified in secrets.h
-  if (!networkConnect())
-  {
-    // alert user to the WiFi connectivity problem
-    debugMessage(String("Connection to ") + WIFI_SSID + " failed", 1);
-    // IMPROVEMENT: How do we want to handle this? the rest of the code will barf...
-    // ESP.restart();
-  }
+  WiFi.hostname(DEVICE_ID);
 
-  mqttDeviceWiFiUpdate(rssi);
-  bl_mqtt.subscribe(&benchLightSub);
+  // reset settings - wipe stored credentials for testing
+  // these are stored by the esp library
+  // wm.resetSettings();
+
+  bool connected;
+  // connected = wm.autoConnect(); // auto generated AP name from chipid
+  connected = wm.autoConnect("benchLight AP"); // anonymous ap
+  // connected = wm.autoConnect("AutoConnectAP","password"); // password protected ap
+
+  if(!connected) {
+    Serial.println("Failed to connect");
+    rssi = 0;
+    // ESP.restart();
+  } 
+  else {
+    rssi = abs(WiFi.RSSI());
+    // debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
+    debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
+    mqttDeviceWiFiUpdate(rssi);
+    bl_mqtt.subscribe(&benchLightSub);
+  }
 }
 
 void loop() {
 
   // re-establish WiFi connection if needed
   if ((WiFi.status() != WL_CONNECTED) && (millis() - timeLastWiFiConnectMS > timeWiFiKeepAliveIntervalMS)) {
+    bool connected;
+
     timeLastWiFiConnectMS = millis();
-    if (!networkConnect()) {
-      // alert user to the WiFi connectivity problem
-      rssi = 0;
-      debugMessage(String("Connection to ") + WIFI_SSID + " failed", 1);
-      // IMPROVEMENT: How do we want to handle this? the rest of the code will barf...
-      // ESP.restart();
+    wm.setConnectTimeout(180);
+    wm.setConnectRetries(100);
+    if (wm.getWiFiIsSaved()) wm.setEnableConfigPortal(false);
+    connected = wm.autoConnect("benchLight AP");
+
+    if(!connected) {
+    Serial.println("Failed to connect");
+    rssi = 0;
+    // ESP.restart();
+    } 
+    else {
+      rssi = abs(WiFi.RSSI());
+      // debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
+      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
+      mqttDeviceWiFiUpdate(rssi);
     }
-    mqttDeviceWiFiUpdate(rssi);
   }
 
   // is there a MQTT message to process?
@@ -141,38 +161,6 @@ void loop() {
     digitalWrite(hardwareRelayPin, LOW);
     mqttDeviceLightUpdate(false);
     faceSeen = false;
-  }
-}
-
-bool networkConnect() 
-// Connect to WiFi network specified in secrets.h
-{
-  // reconnect to WiFi only if needed
-  if (WiFi.status() == WL_CONNECTED) 
-  {
-    debugMessage("Already connected to WiFi",2);
-    return true;
-  }
-
-  WiFi.mode(WIFI_STA); // IMPROVEMENT: test to see if this improves connection time
-  // set hostname has to come before WiFi.begin
-  WiFi.hostname(DEVICE_ID);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  uint32_t timeWiFiConnectStart = millis();
-  while ((WiFi.status() != WL_CONNECTED) && ((millis() - timeWiFiConnectStart) < timeNetworkConnectTimeoutMS)) {
-    delay(100);
-  }
-
-  if (WiFi.status() == WL_CONNECTED) 
-    {
-      rssi = abs(WiFi.RSSI());
-      debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
-      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
-      return true;
-    }
-  else {
-    return false;
   }
 }
 
