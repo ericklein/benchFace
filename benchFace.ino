@@ -62,7 +62,7 @@ void setup() {
   // wm.resetSettings(); // wipe stored credentials
 
   if(networkConnect()) {
-    mqttDeviceWiFiUpdate(WiFi.RSSI());
+    mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
     bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
   }
 }
@@ -77,7 +77,7 @@ void loop() {
     if (wm.getWiFiIsSaved()) 
       wm.setEnableConfigPortal(false);
     if(networkConnect()) {
-      mqttDeviceWiFiUpdate(WiFi.RSSI());
+      mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
       bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
     }
   }
