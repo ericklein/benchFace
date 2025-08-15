@@ -13,8 +13,6 @@
 // required external functions and data structures
 extern void debugMessage(String messageText, uint8_t messageLevel);
 
-const uint8_t networkConnectAttemptLimit = 3;
-
 // Status variables shared across various functions
 
 // MQTT setup
@@ -64,33 +62,29 @@ String generateTopic(char *key)
   return(topic);
 }
 
-  bool mqttDeviceWiFiUpdate(uint8_t rssi)
-  {
-    bool result = false;
-    if (rssi!=0)
-    {
-      String topic;
-      topic = generateTopic(VALUE_KEY_RSSI);  // Generate topic using config.h and secrets.h parameters
-      // add ,MQTT_QOS_1); if problematic, remove QOS parameter
-      Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&bl_mqtt, topic.c_str());
-      
-      mqttConnect();
+bool mqttDeviceWiFiUpdate(uint8_t rssi)
+{
+  bool published = false;
+  String topic;
+  topic = generateTopic(VALUE_KEY_RSSI);  // Generate topic using config.h and secrets.h parameters
+  // add ,MQTT_QOS_1); if problematic, remove QOS parameter
+  Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&bl_mqtt, topic.c_str());
+  
+  mqttConnect();
 
-      if (rssiLevelPub.publish((uint32_t)rssi)) // explicitly cast due to compiler ambiguity
-      {
-        debugMessage("MQTT publish: WiFi RSSI succeeded",2);
-        result = true;
-      }
-      else
-      {
-        debugMessage("MQTT publish: WiFi RSSI failed",2);
-      }
-    }
-    return(result);
+  if (rssiLevelPub.publish((uint32_t)rssi)) // explicitly cast due to compiler ambiguity
+  {
+    debugMessage("MQTT publish: WiFi RSSI succeeded",2);
+    published = true;
   }
+  else
+    debugMessage("MQTT publish: WiFi RSSI failed",2);
+  return(published);
+}
 
 bool mqttDeviceLightUpdate(bool status)
 {
+  bool published = false;
   String topic;
   topic = generateTopic(VALUE_KEY_LIGHT);  // Generate topic using config.h and secrets.h parameters
   // add ,MQTT_QOS_1); if problematic, remove QOS parameter
@@ -101,13 +95,11 @@ bool mqttDeviceLightUpdate(bool status)
   if (lightPub.publish((uint32_t)status))
   {
     debugMessage("MQTT publish: light status succeeded",1);
-    return true;
+    published = true;
   }
   else
-  {
     debugMessage("MQTT publish: light status failed",1);
-    return false;
-  }
+  return(published);
 }
 
 uint8_t mqttBenchLightMessage()

@@ -36,44 +36,34 @@ uint32_t timeLastSensorSampleMS = 0;
 uint32_t timeLastFaceSeenMS = 0;
 uint32_t timeLastWiFiConnectMS = 0;
 
-uint8_t rssi = 0; // 0 value used to indicate no WiFi connection
 bool faceSeen = false;
 
 void setup() {
-  // handle Serial first so debugMessage() works
+  // config Serial first for debugMessage()
   #ifdef DEBUG
     Serial.begin(115200);
-    while (!Serial) ;
-    debugMessage("benchLight started",1);
-    debugMessage(String("Client ID: ") + DEVICE_ID,1);
+    while (!Serial);
+    debugMessage("benchLight started", 1);
+    debugMessage(String("Client ID: ") + DEVICE_ID, 1);
   #endif
 
+  // configure relay pin
   Wire.begin();
-
   pinMode(hardwareRelayPin, OUTPUT);
 
   WiFi.hostname(DEVICE_ID);
 
-  // reset settings - wipe stored credentials for testing
-  // these are stored by the esp library
-  // wm.resetSettings();
+  // configure WiFiManager
+  #ifndef DEBUG
+    wm.SetDebugOutput(false);
+  #endif
+  wm.setConnectTimeout(180);
+  wm.setConnectRetries(100);
+  // wm.resetSettings(); // wipe stored credentials
 
-  bool connected;
-  // connected = wm.autoConnect(); // auto generated AP name from chipid
-  connected = wm.autoConnect("benchLight AP"); // anonymous ap
-  // connected = wm.autoConnect("AutoConnectAP","password"); // password protected ap
-
-  if(!connected) {
-    Serial.println("Failed to connect");
-    rssi = 0;
-    // ESP.restart();
-  } 
-  else {
-    rssi = abs(WiFi.RSSI());
-    // debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
-    debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
-    mqttDeviceWiFiUpdate(rssi);
-    bl_mqtt.subscribe(&benchLightSub);
+  if(networkConnect()) {
+    mqttDeviceWiFiUpdate(WiFi.RSSI());
+    bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
   }
 }
 
@@ -84,21 +74,11 @@ void loop() {
     bool connected;
 
     timeLastWiFiConnectMS = millis();
-    wm.setConnectTimeout(180);
-    wm.setConnectRetries(100);
-    if (wm.getWiFiIsSaved()) wm.setEnableConfigPortal(false);
-    connected = wm.autoConnect("benchLight AP");
-
-    if(!connected) {
-    Serial.println("Failed to connect");
-    rssi = 0;
-    // ESP.restart();
-    } 
-    else {
-      rssi = abs(WiFi.RSSI());
-      // debugMessage(String("WiFi IP address lease from ") + WIFI_SSID + " is " + WiFi.localIP().toString(), 1);
-      debugMessage(String("WiFi RSSI is: ") + rssi + " dBm", 2);
-      mqttDeviceWiFiUpdate(rssi);
+    if (wm.getWiFiIsSaved()) 
+      wm.setEnableConfigPortal(false);
+    if(networkConnect()) {
+      mqttDeviceWiFiUpdate(WiFi.RSSI());
+      bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
     }
   }
 
@@ -164,13 +144,31 @@ void loop() {
   }
 }
 
+bool networkConnect()
+// Connect to WiFi network using WiFi Manager library
+{
+  bool connected;
+
+  // connected = wm.autoConnect(); // auto generated AP name from chipid
+  connected = wm.autoConnect("benchLight AP"); // anonymous ap
+  // connected = wm.autoConnect("AutoConnectAP","password"); // password protected ap
+
+  if(!connected) {
+    debugMessage("Failed to connect to WiFi, local control of light ONLY", 1);
+    // ESP.restart(); // if MQTT support is critical, make failure a stop gate
+  } 
+  else
+    debugMessage(String("WiFi RSSI is: ") + abs(WiFi.RSSI()) + " dBm", 1);
+  return (connected);
+}
+
 void debugMessage(String messageText, uint8_t messageLevel)
 // wraps Serial.println as #define conditional
 {
-#ifdef DEBUG
-  if (messageLevel <= DEBUG) {
-    Serial.println(messageText);
-    Serial.flush();  // Make sure the message gets output before other functions
-  }
-#endif
+  #ifdef DEBUG
+    if (messageLevel <= DEBUG) {
+      Serial.println(messageText);
+      Serial.flush();  // Make sure the message gets output before other functions
+    }
+  #endif
 }

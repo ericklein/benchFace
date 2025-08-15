@@ -16,9 +16,11 @@ const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 3
 const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
 const uint32_t timeNetworkConnectTimeoutMS = 10000;
 
+const uint8_t networkConnectAttemptLimit = 3;
+
 // How long to wait between reading the sensor. The sensor can be read as
 // frequently as you like, but the results only change at about 5FPS
-const uint32_t sensorSampleIntervalMS = 5000;
+const uint32_t sensorSampleIntervalMS = 2000;
 
 #ifdef DEBUG
   const uint32_t faceDetectTimeoutWindowMS = 30000;
