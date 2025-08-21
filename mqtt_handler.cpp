@@ -21,6 +21,11 @@ extern void debugMessage(String messageText, uint8_t messageLevel);
 extern Adafruit_MQTT_Client bl_mqtt;
 Adafruit_MQTT_Subscribe benchLightSub = Adafruit_MQTT_Subscribe(&bl_mqtt, MQTT_SUB_TOPIC);
 
+extern String hardwareDeviceSite;
+extern String hardwareDeviceLocation;
+extern String hardwareDeviceRoom;
+extern String hardwareDeviceID;
+
 bool mqttConnect()
 // Connects and reconnects to MQTT broker, call as needed to maintain connection
 {
@@ -55,9 +60,8 @@ String generateTopic(char *key)
 // Utility function to streamline dynamically generating MQTT topics using site and device 
 // parameters defined in config.h and our standard naming scheme using values set in secrets.h
 {
-  String topic;
-  topic = String(DEVICE_SITE) + "/" + String(DEVICE_LOCATION) + "/" + String(DEVICE_ROOM) +
-          "/" + String(DEVICE) + "/" + String(DEVICE_ID) + "/" + String(key);
+  String topic = hardwareDeviceSite + "/" + hardwareDeviceLocation + "/" + hardwareDeviceRoom +
+          "/" + hardwareDeviceType + "/" + hardwareDeviceID + "/" + String(key);
   debugMessage(String("Generated MQTT topic: ") + topic,2);
   return(topic);
 }

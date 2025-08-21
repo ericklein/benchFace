@@ -1,6 +1,6 @@
 /*
   Project Name:   benchFace
-  Description:    trigger (bench) light via CV or MQTT
+  Description:    toggle (bench) light via CV or MQTT message
 */
 
 // hardware and internet configuration parameters
@@ -13,7 +13,11 @@
 #include "person_sensor.h"
 
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
-WiFiManager wm;
+WiFiManager wfm;
+
+// read/write to ESP32 persistent storage
+#include <Preferences.h>
+Preferences nvConfigStorage;
 
 // MQTT setup
 
@@ -38,13 +42,22 @@ uint32_t timeLastWiFiConnectMS = 0;
 
 bool faceSeen = false;
 
+// flag to let us know we need to save config data from WiFi Manager AP mode
+bool saveWFMConfig = false;
+
+String hardwareDeviceSite;
+String hardwareDeviceLocation;
+String hardwareDeviceRoom;
+String hardwareDeviceID;
+
+// Question: does saveConfigCallback() need to be in front of setup()?
+
 void setup() {
   // config Serial first for debugMessage()
   #ifdef DEBUG
     Serial.begin(115200);
     while (!Serial);
     debugMessage("benchLight started", 1);
-    debugMessage(String("Client ID: ") + DEVICE_ID, 1);
   #endif
 
   // configure relay pin
@@ -55,27 +68,83 @@ void setup() {
 
   // configure WiFiManager
   #ifndef DEBUG
-    wm.SetDebugOutput(false);
+    wfm.SetDebugOutput(false);
   #endif
-  wm.setConnectTimeout(180);
-  wm.setConnectRetries(100);
-  // wm.resetSettings(); // wipe stored credentials
+  wfm.setConnectTimeout(180);
+  wfm.setConnectRetries(100);
+  wfm.resetSettings(); // wipe stored credentials
+
+   // hint text (optional)
+  //WiFiManagerParameter hint_text("<small>*If you want to connect to already connected AP, leave SSID and password fields empty</small>");
+  
+  // collect MQTT and device parameters while in AP mode
+  // WiFiManagerParameter mqttBroker("mqttBroker","MQTT broker address","192.168.1.27",30);;
+  // WiFiManagerParameter mqttPort("mqttPort", "MQTT broker port", "1883", 5);
+  // WiFiManagerParameter mqttUser("mqttUser", "MQTT username", "eric", 20);
+  // WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", "default", 20);
+
+  // collect parameters used to build network endpoint paths
+  WiFiManagerParameter deviceSite("deviceSite", "device site", "7828", 20);
+  WiFiManagerParameter deviceLocation("deviceLocation", "indoor or outdoor", "indoor", 20);
+  WiFiManagerParameter deviceRoom("deviceRoom", "what room is the device in", "bedroom", 20);
+  WiFiManagerParameter deviceID("deviceID", "unique name for device", "benchLight 001" , 30);
+ 
+  // order determines on-screen order
+  //wfm.addParameter(&hint_text);
+  // wfm.addParameter(&mqttBroker);
+  // wfm.addParameter(&mqttPort);
+  // wfm.addParameter(&mqttUser);
+  // wfm.addParameter(&mqttPassword);
+  wfm.addParameter(&deviceSite);
+  wfm.addParameter(&deviceLocation);
+  wfm.addParameter(&deviceRoom);
+  wfm.addParameter(&deviceID);
+
+  //set config save notify callback
+  wfm.setSaveConfigCallback(saveConfigCallback);
 
   if(networkConnect()) {
+      // open config prefs in read-write mode
+      nvConfigStorage.begin("benchLight", false);
+      if (saveWFMConfig) {
+      // copy new config data to non-volatile storage
+      hardwareDeviceSite = deviceSite.getValue();
+      nvConfigStorage.putString("deviceSite", hardwareDeviceSite);
+
+      hardwareDeviceLocation = deviceLocation.getValue();
+      nvConfigStorage.putString("deviceLocation", hardwareDeviceLocation);
+
+      hardwareDeviceRoom = deviceRoom.getValue();
+      nvConfigStorage.putString("deviceRoom", hardwareDeviceRoom);
+
+      hardwareDeviceID = deviceID.getValue();
+      nvConfigStorage.putString("deviceID", hardwareDeviceID);
+    }
+    // read config data from non-volatile storage
+    if (!hardwareDeviceSite){
+      hardwareDeviceSite = nvConfigStorage.getString("deviceSite");
+      debugMessage(String("Device site is ") + hardwareDeviceSite,2);
+      hardwareDeviceLocation = nvConfigStorage.getString("deviceLocation");
+      debugMessage(String("Device location is ") + hardwareDeviceLocation,2);
+      hardwareDeviceRoom = nvConfigStorage.getString("deviceRoom");
+      debugMessage(String("Device room is ") + hardwareDeviceRoom,2);
+      hardwareDeviceID = nvConfigStorage.getString("deviceID");
+      debugMessage(String("Device ID is ") + hardwareDeviceID,1);
+    }
+    // now that network endpoint path parameters loaded, write away :)
     mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
     bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
   }
 }
 
 void loop() {
-
   // re-establish WiFi connection if needed
   if ((WiFi.status() != WL_CONNECTED) && (millis() - timeLastWiFiConnectMS > timeWiFiKeepAliveIntervalMS)) {
     bool connected;
 
     timeLastWiFiConnectMS = millis();
-    if (wm.getWiFiIsSaved()) 
-      wm.setEnableConfigPortal(false);
+    if (wfm.getWiFiIsSaved()) 
+      wfm.setEnableConfigPortal(false);
     if(networkConnect()) {
       mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
       bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
@@ -149,9 +218,9 @@ bool networkConnect()
 {
   bool connected;
 
-  // connected = wm.autoConnect(); // auto generated AP name from chipid
-  connected = wm.autoConnect("benchLight AP"); // anonymous ap
-  // connected = wm.autoConnect("AutoConnectAP","password"); // password protected ap
+  // connected = wfm.autoConnect(); // auto generated AP name from chipid
+  connected = wfm.autoConnect("benchLight AP"); // anonymous ap
+  // connected = wfm.autoConnect("AutoConnectAP","password"); // password protected ap
 
   if(!connected) {
     debugMessage("Failed to connect to WiFi, local control of light ONLY", 1);
@@ -171,4 +240,11 @@ void debugMessage(String messageText, uint8_t messageLevel)
       Serial.flush();  // Make sure the message gets output before other functions
     }
   #endif
+}
+
+void saveConfigCallback() 
+//callback notifying us of the need to save config from WiFi Manager AP mode
+{
+  debugMessage("Need to save config info from WiFi Manager AP mode",1);
+  saveWFMConfig = true;
 }

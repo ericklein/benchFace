@@ -1,5 +1,5 @@
 # benchFace
-trigger bench light using vision ML or MQTT trigger
+toggle bench light using vision ML or MQTT message
 
 ## Purpose
 benchLight was designed so that when I sit down at my lab bench, the overhead light immediately turns on. When I walk away, it will turn off after a predefined delay. I'm lazy.

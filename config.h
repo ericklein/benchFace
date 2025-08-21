@@ -29,6 +29,8 @@ const uint32_t sensorSampleIntervalMS = 2000;
 #endif
 
 // Hardware
+// used to build network endpoint paths
+const String hardwareDeviceType = "benchLight";
 
 // relay featherwing
 const uint8_t hardwareRelayPin = 12;
