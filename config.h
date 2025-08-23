@@ -9,12 +9,31 @@
 // comment out to turn off; 1 = summary, 2 = verbose
 #define DEBUG 2
 
+struct MqttConfig {
+  String host;
+  uint16_t port;
+  String user;
+  String password;
+};
+
+struct networkEndpointConfig {
+  String site;
+  String location;
+  String room;
+  String deviceID;
+};
+
+extern struct MqttConfig mqttConfig;
+extern struct networkEndpointConfig endpointPath;
+
 // Configuration variables that change rarely
 
-// Network timers
+// timers
 const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 300 seconds to keep alive
 const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
 const uint32_t timeNetworkConnectTimeoutMS = 10000;
+
+// const uint32_t timelastMqttAttemptMS = 0; // new MQTT
 
 const uint8_t networkConnectAttemptLimit = 3;
 
@@ -28,9 +47,12 @@ const uint32_t sensorSampleIntervalMS = 2000;
   const uint32_t faceDetectTimeoutWindowMS = 300000;
 #endif
 
-// Hardware
-// used to build network endpoint paths
+// hardware
 const String hardwareDeviceType = "benchLight";
 
 // relay featherwing
 const uint8_t hardwareRelayPin = 12;
+
+// button
+const uint8_t hardwareWipeButton = 38; // second button on Adafruit Feather ESP32V2 board
+const uint16_t timeResetButtonHoldMS = 3000; // Long-press duration to wipe config
