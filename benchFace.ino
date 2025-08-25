@@ -53,21 +53,8 @@ void setup() {
   Wire.begin();
   pinMode(hardwareRelayPin, OUTPUT);
   pinMode(hardwareWipeButton, INPUT_PULLUP);
-
-  // // initiate device wipe at boot if button is held
-  // for (uint8_t i = 0; i < 50; i++) { // ~500ms grace window
-  //   checkResetLongPress();
-  //   delay(10);
-  // }
-  // debugMessage("No reset via long press executed",2);
   
   loadNVConfig();
-
-  // if (needPortal()) {
-  //   openWiFiManager();     // Handles Wi-Fi + hostname + MQTT param entry
-  // } else {
-  //   WiFi.begin();          // Use stored Wi-Fi creds
-  // }
 
   if (openWiFiManager()) {
     // new MQTT 
@@ -82,11 +69,9 @@ void setup() {
 void loop() {
   checkResetLongPress();  // Always watching for long-press to wipe
 
-  // // Keep Wi-Fi alive; if not connected, wait and retry passively
-  // if (WiFi.status() != WL_CONNECTED) {
-  //   delay(1000);
-  //   return;
-  // }
+// if (wifiManager.getWiFiIsSaved()) 
+//   wifiManager.setEnableConfigPortal(false); 
+// wifiManager.autoConnect("benchLight AP");
 
   // new MQTT 
   //   // Maintain MQTT connection
@@ -176,13 +161,6 @@ void saveConfigCallback()
   saveWFMConfig = true;
 }
 
-// bool needPortal() {
-//   if (digitalRead(hardwareWipeButton) == LOW) return true; // force portal at boot
-
-//   loadNVConfig();
-//   return mqttConfig.host.length() == 0; // no MQTT host saved → need portal
-// }
-
 bool openWiFiManager()
 // Connect to WiFi network using WiFiManager
 {
@@ -199,15 +177,15 @@ bool openWiFiManager()
   #endif
   wfm.setConnectTimeout(180);
 
-  wfm.setTitle("setup benchLight device");
+  wfm.setTitle("benchLight setup");
   // hint text (optional)
   //WiFiManagerParameter hint_text("<small>*If you want to connect to already connected AP, leave SSID and password fields empty</small>");
   
   // collect MQTT and device parameters while in AP mode
-  // WiFiManagerParameter mqttBroker("mqttBroker","MQTT broker address","192.168.1.27",30);;
-  // WiFiManagerParameter mqttPort("mqttPort", "MQTT broker port", "1883", 5);
-  // WiFiManagerParameter mqttUser("mqttUser", "MQTT username", "eric", 20);
-  // WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", "default", 20);
+  // WiFiManagerParameter mqttBroker("mqttBroker","MQTT broker address",defaultMQTTBroker.c_str(),30);;
+  // WiFiManagerParameter mqttPort("mqttPort", "MQTT broker port", defaultMQTTPort, 5);
+  // WiFiManagerParameter mqttUser("mqttUser", "MQTT username", defaultMQTTUser.c_str(), 20);
+  // WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", defaultMQTTPassword.c_str(), 20);
 
   // collect parameters used to build network endpoint paths
   WiFiManagerParameter deviceSite("deviceSite", "device site", defaultSite.c_str(), 20);
