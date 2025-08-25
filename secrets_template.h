@@ -23,4 +23,4 @@
 #define VALUE_KEY_RSSI    "key_value" // 
 
 // This line is required until a bug fix is completed. Copy values from config step 3.
-#define MQTT_SUB_TOPIC    "DEVICE_SITE/DEVICE_LOCATION/DEVICE_ROOM/DEVICE/light"
+#define MQTT_SUB_TOPIC    "DEVICE_SITE/DEVICE_LOCATION/DEVICE_ROOM/DEVICE_TYPE/DEVICE_ID/light"

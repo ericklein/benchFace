@@ -19,7 +19,8 @@ Preferences nvConfig;
 // MQTT setup
 #include <Adafruit_MQTT.h>
 #include <Adafruit_MQTT_Client.h>
-Adafruit_MQTT_Client bl_mqtt(&client, MQTT_BROKER, MQTT_PORT, DEVICE_ID, MQTT_USER, MQTT_PASS);
+// Adafruit_MQTT_Client bl_mqtt(&client, MQTT_BROKER, MQTT_PORT, DEVICE_ID, MQTT_USER, MQTT_PASS);
+Adafruit_MQTT_Client bl_mqtt(&client, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASS);
 extern Adafruit_MQTT_Subscribe benchLightSub;
 extern bool mqttConnect();
 extern bool mqttDeviceWiFiUpdate(uint32_t rssi);
@@ -53,36 +54,39 @@ void setup() {
   pinMode(hardwareRelayPin, OUTPUT);
   pinMode(hardwareWipeButton, INPUT_PULLUP);
 
-  // initiate device wipe at boot if button is held
-  for (uint8_t i = 0; i < 50; i++) { // ~500ms grace window
-    checkResetLongPress();
-    delay(10);
-  }
+  // // initiate device wipe at boot if button is held
+  // for (uint8_t i = 0; i < 50; i++) { // ~500ms grace window
+  //   checkResetLongPress();
+  //   delay(10);
+  // }
+  // debugMessage("No reset via long press executed",2);
   
   loadNVConfig();
 
-  if (needPortal()) {
-    openWiFiManager();     // Handles Wi-Fi + hostname + MQTT param entry
-  } else {
-    WiFi.begin();          // Use stored Wi-Fi creds
+  // if (needPortal()) {
+  //   openWiFiManager();     // Handles Wi-Fi + hostname + MQTT param entry
+  // } else {
+  //   WiFi.begin();          // Use stored Wi-Fi creds
+  // }
+
+  if (openWiFiManager()) {
+    // new MQTT 
+    // mqtt.setCallback(mqttMessageCallback);
+    // mqtt.setServer(cfg.host.c_str(), cfg.port);
+
+    mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
+    bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
   }
-
-  // new MQTT 
-  // mqtt.setCallback(mqttMessageCallback);
-  // mqtt.setServer(cfg.host.c_str(), cfg.port);
-
-  mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
-  bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
 }
 
 void loop() {
   checkResetLongPress();  // Always watching for long-press to wipe
 
-  // Keep Wi-Fi alive; if not connected, wait and retry passively
-  if (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    return;
-  }
+  // // Keep Wi-Fi alive; if not connected, wait and retry passively
+  // if (WiFi.status() != WL_CONNECTED) {
+  //   delay(1000);
+  //   return;
+  // }
 
   // new MQTT 
   //   // Maintain MQTT connection
@@ -104,14 +108,9 @@ void loop() {
   // }
 
   // is there a MQTT message to process?
-  // ensure we have a connection to MQTT
-  if (!mqttConnect())
+  if (mqttConnect())
   {
-    // error; not sure how to handle
-  }
-  else
-  {
-    // check to see if there is a status change for the light
+    // BLOCKING code; check to see if there is a status change for the light
     uint8_t status = mqttBenchLightMessage();
 
     if (status != 2) { // 2 is no message received 
@@ -124,7 +123,12 @@ void loop() {
     // if(! bl_mqtt.ping()) {
     //   mqtt.disconnect();
   }
+  else
+  {
+    // error; not sure how to handle
+  }
 
+  // BUG : Because of the blocking MQTT code, this always gets triggered unless sensorSampleIntervalMS > mqttSubSampleIntervalMS
   // is it time to look for a face?
   if((millis() - timeLastSensorSampleMS) >= sensorSampleIntervalMS)
   {
@@ -169,21 +173,22 @@ void loop() {
 void saveConfigCallback() 
 //callback notifying us of the need to save config from WiFi Manager AP mode
 {
-  debugMessage("Need to save config info from WiFi Manager AP mode",1);
   saveWFMConfig = true;
 }
 
-bool needPortal() {
-  if (digitalRead(hardwareWipeButton) == LOW) return true; // force portal at boot
+// bool needPortal() {
+//   if (digitalRead(hardwareWipeButton) == LOW) return true; // force portal at boot
 
-  loadNVConfig();
-  return mqttConfig.host.length() == 0; // no MQTT host saved → need portal
-}
+//   loadNVConfig();
+//   return mqttConfig.host.length() == 0; // no MQTT host saved → need portal
+// }
 
 bool openWiFiManager()
 // Connect to WiFi network using WiFiManager
 {
   bool connected;
+
+  debugMessage("openWiFiManager begin",2);
 
   WiFiManager wfm;
 
@@ -193,7 +198,6 @@ bool openWiFiManager()
     wfm.SetDebugOutput(false);
   #endif
   wfm.setConnectTimeout(180);
-  wfm.setConnectRetries(100);
 
   wfm.setTitle("setup benchLight device");
   // hint text (optional)
@@ -206,10 +210,10 @@ bool openWiFiManager()
   // WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", "default", 20);
 
   // collect parameters used to build network endpoint paths
-  WiFiManagerParameter deviceSite("deviceSite", "device site", "7828", 20);
-  WiFiManagerParameter deviceLocation("deviceLocation", "indoor or outdoor", "indoor", 20);
-  WiFiManagerParameter deviceRoom("deviceRoom", "what room is the device in", "bedroom", 20);
-  WiFiManagerParameter deviceID("deviceID", "unique name for device", "benchLight 001" , 30);
+  WiFiManagerParameter deviceSite("deviceSite", "device site", defaultSite.c_str(), 20);
+  WiFiManagerParameter deviceLocation("deviceLocation", "indoor or outdoor", defaultLocation.c_str(), 20);
+  WiFiManagerParameter deviceRoom("deviceRoom", "what room is the device in", defaultRoom.c_str(), 20);
+  WiFiManagerParameter deviceID("deviceID", "unique name for device", defaultDeviceID.c_str(), 30);
  
   // order determines on-screen order
   //wfm.addParameter(&hint_text);
@@ -227,11 +231,12 @@ bool openWiFiManager()
   // connected = wfm.autoConnect("benchLight AP","password"); // password protected AP
 
   if(!connected) {
-    debugMessage("Failed to connect to WiFi, local control of light ONLY", 1);
+    debugMessage("WiFi connection failure; local light control ONLY", 1);
     // ESP.restart(); // if MQTT support is critical, make failure a stop gate
   } 
   else {
     if (saveWFMConfig) {
+      debugMessage("retreiving new parameters from AP portal",2);
       endpointPath.site = deviceSite.getValue();
       endpointPath.location = deviceLocation.getValue();
       endpointPath.room = deviceRoom.getValue();
@@ -245,15 +250,15 @@ bool openWiFiManager()
 
       saveNVConfig();
       saveWFMConfig = false;
-      debugMessage("saved portal parameters to nv storage",1);
-      debugMessage(String("Connected to WiFI AP " + WiFi.SSID() + " with ") + abs(WiFi.RSSI()) + " dBm RSSI", 1);
     }
+    debugMessage(String("OpenWiFiManager end; connected to " + WiFi.SSID() + ", ") + abs(WiFi.RSSI()) + " dBm RSSI", 1);
   }
   return (connected);
 }
 
 // Preferences helper routines
 void loadNVConfig() {
+  debugMessage("loadNVConfig begin",2);
   nvConfig.begin("config", true); // read-only
 
   endpointPath.site = nvConfig.getString("site", defaultSite);
@@ -271,12 +276,14 @@ void loadNVConfig() {
   // mqttBrokerConfig.user     = nvConfig.getString("user", defaultMQTTUser);
   // mqttBrokerConfig.password = nvConfig.getString("password", defaultMQTTPassword);
   nvConfig.end();
+  debugMessage("loadNVConfig end",2);
 }
 
 void saveNVConfig()
 //void saveNVConfig(const MqttConfig& config)
 // copy new config data to non-volatile storage
 {
+  debugMessage("saveNVConfig begin",2);
   nvConfig.begin("config", false); // read-write
 
   nvConfig.putString("site", endpointPath.site);
@@ -291,13 +298,13 @@ void saveNVConfig()
   // nvConfig.putString("password",  mqttBrokerConfig.password);
 
   nvConfig.end();
-  debugMessage("New config information saved to nv storage",1);
+  debugMessage("saveNVConfig end",2);
 }
 
 void wipePrefsAndReboot() 
 // Wipes all ESP, WiFiManager preferences and reboots device
 {
-  debugMessage("Wiping all device preferences and rebooting",1);
+  debugMessage("wipePrefsAndReboot begin",2);
 
   // Clear nv storage
   nvConfig.begin("config", false);
@@ -311,19 +318,25 @@ void wipePrefsAndReboot()
   WiFiManager wm;
   wm.resetSettings();
 
-  delay(200);
+  debugMessage("wipePrefsAndReboot end, rebooting...",2);
   ESP.restart();
 }
 
 void checkResetLongPress() {
-  uint8_t level = digitalRead(hardwareWipeButton);
+  uint8_t buttonState = digitalRead(hardwareWipeButton);
 
-  if (level == LOW) {
-    if (timeResetPressStartMS == 0) timeResetPressStartMS = millis();
+  if (buttonState == LOW) {
+    debugMessage(String("button pressed for ") + ((millis() - timeResetPressStartMS)/1000) + " seconds",2);
+    if (timeResetPressStartMS == 0)
+      timeResetPressStartMS = millis();
     if (millis() - timeResetPressStartMS >= timeResetButtonHoldMS)
       wipePrefsAndReboot();
-    else
-      timeResetPressStartMS = 0; // released
+  }
+  else {
+    if (timeResetPressStartMS != 0) {
+      debugMessage("button released",2);
+      timeResetPressStartMS = 0; // reset button press timer
+    }
   }
 }
 

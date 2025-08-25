@@ -104,8 +104,9 @@ bool mqttDeviceLightUpdate(bool status)
 
 uint8_t mqttBenchLightMessage()
 {
+  debugMessage("Checking mqtt subscription",2);
   Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = bl_mqtt.readSubscription(5000))) 
+  while ((subscription = bl_mqtt.readSubscription(mqttSubSampleIntervalMS))) 
   {
     if (subscription == &benchLightSub)
     {
