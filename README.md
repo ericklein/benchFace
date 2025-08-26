@@ -38,7 +38,6 @@ ESP32 MCU, i2c, and one GPIO pin.
 - [Github Issues](https://github.com/ericklein/benchFace/issues)
 
 ## .plan (big ticket items)
-- [WiFI Manager](https://github.com/tzapu/WiFiManager) support
 - OTA firmware update support
 - transition to individual face recognition
 - Home Assistant integration via HassioMQTT
