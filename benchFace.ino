@@ -17,6 +17,8 @@ PubSubClient mqtt(client);
 
 extern bool mqttConnect();
 extern void mqttPublish(const char* topic, const String& payload);
+extern void mqttSubscribe(const char* topic);
+extern void mqttMessageCallback(char* topic, byte* payload, unsigned int length);
 
 // Global variables
 // timers
@@ -49,15 +51,16 @@ void setup() {
 
   if (openWiFiManager()) {
     // setup MQTT
-    // mqtt.setCallback(mqttMessageCallback);
-    mqttConnect();
+    mqtt.setCallback(mqttMessageCallback);
+    if (mqttConnect()) {
+      // publish new WiFi RSSI to MQTT
+      const char* topic = generateMQTTTopic(VALUE_KEY_RSSI);
+      mqttPublish(topic, String(abs(WiFi.RSSI())));
 
-    // publish new WiFi RSSI to MQTT
-    const char* topic = generateMQTTTopic(VALUE_KEY_RSSI);
-    mqttPublish(topic, String(abs(WiFi.RSSI())));
-
-    // subscribe to MQTT broker light topic
-    // bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
+      // subscribe to MQTT broker light topic
+      const char* lightTopic = generateMQTTTopic(VALUE_KEY_LIGHT);
+      mqttSubscribe(lightTopic);
+    }
   }
 }
 
@@ -79,29 +82,6 @@ void loop() {
     mqtt.loop();
   }
 
-  // is there a MQTT topic change to process?
-  // if (mqttConnect())
-  // {
-  //   // BLOCKING code; check to see if there is a status change for the light
-  //   uint8_t status = mqttBenchLightMessage();
-
-  //   if (status != 2) { // 2 is no message received 
-  //     debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
-  //     digitalWrite(hardwareRelayPin, status);
-  //     if (!status)
-  //       faceSeen = false; // allows for a person to be detected after a remote override of light state
-  //   }
-  //   // Question : Do we need to ping the server if we are already querying it regularly?
-  //   // if(! bl_mqtt.ping()) {
-  //   //   mqtt.disconnect();
-  // }
-  // else
-  // {
-  //   // error; not sure how to handle
-  // }
-
-  // BUG : Because of the blocking MQTT code, this always gets triggered unless sensorSampleIntervalMS > mqttSubSampleIntervalMS
-  // is it time to look for a face?
   if((millis() - timeLastSensorSampleMS) >= sensorSampleIntervalMS)
   {
     person_sensor_results_t results = {};

@@ -12,20 +12,27 @@
 
 // required external functions and data structures
 extern void debugMessage(String messageText, uint8_t messageLevel);
+extern const char* generateMQTTTopic(String key);
+extern bool faceSeen;
 
 // MQTT setup
 #include <PubSubClient.h>
 extern PubSubClient mqtt;
 
-// void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
-//   String msg;
-//   msg.reserve(length);
-//   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-//   Serial.printf("[MQTT IN] %s => %s\n", topic, msg.c_str());
-
-//   // Example response:
-//   // mqttPublish(mqttBrokerConfig.topicPub.c_str(), String("echo: ") + msg);
-// }
+void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
+  debugMessage(String("new topic from broker ") + topic, 1);
+  const char* targetTopic = generateMQTTTopic(VALUE_KEY_LIGHT);
+  if (strcmp(targetTopic, topic) == 0) {
+    String message;
+    message.reserve(length);
+    for (unsigned int loop = 0; loop < length; loop++) message += (char)payload[loop];
+    uint8_t status = message.toInt();
+    debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
+    digitalWrite(hardwareRelayPin, status);
+    if (!status)
+      faceSeen = false; // allows for a person to be detected after a remote override of light state
+  }
+}
 
 bool mqttConnect() {
   if (mqttBrokerConfig.host.isEmpty() || mqttBrokerConfig.port == 0)
@@ -43,10 +50,6 @@ bool mqttConnect() {
 
   if (connected) {
     debugMessage("MQTT connected",1);
-    // if (mqttBrokerConfig.topicSub.length() > 0) {
-    //   mqtt.subscribe(mqttBrokerConfig.topicSub.c_str());
-    //   Serial.printf("Subscribed to %s\n", mqttBrokerConfig.topicSub.c_str());
-    // }
   } else {
     Serial.printf("MQTT connect failed, rc=%d\n", mqtt.state());
   }
@@ -59,8 +62,8 @@ void mqttPublish(const char* topic, const String& payload) {
   // Serial.printf("[MQTT OUT] %s => %s\n", topic, payload.c_str());
 }
 
-// void mqttSubscribe(const char* topic) {
-//   if (!mqtt.connected()) return;
-//   mqtt.subscribe(topic);
-//   Serial.printf("[MQTT SUB] %s\n", topic);
-// }
+void mqttSubscribe(const char* topic) {
+  if (!mqtt.connected()) return;
+  mqtt.subscribe(topic);
+  Serial.printf("[MQTT SUB] %s\n", topic);
+}
