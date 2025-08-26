@@ -15,6 +15,7 @@ struct MqttConfig {
   String user;
   String password;
 };
+extern struct MqttConfig mqttBrokerConfig;
 
 struct networkEndpointConfig {
   String site;
@@ -22,18 +23,14 @@ struct networkEndpointConfig {
   String room;
   String deviceID;
 };
-
-extern struct MqttConfig mqttConfig;
 extern struct networkEndpointConfig endpointPath;
 
 // Configuration variables that change rarely
 
 // timers
-// const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 300 seconds to keep alive
+const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 300 seconds to keep alive
 // const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
 const uint32_t timeNetworkConnectTimeoutMS = 10000; // used by network endpoint code
-
-// const uint32_t timelastMqttAttemptMS = 0; // new MQTT
 
 const uint8_t networkConnectAttemptLimit = 3; // used by network endpoint code
 

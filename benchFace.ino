@@ -9,23 +9,14 @@
 #include <Preferences.h>      // read-write to ESP32 persistent storage
 #include "person_sensor.h"    // https://github.com/moonshine-ai/person_sensor_arduino
 #include <WiFiManager.h>      // https://github.com/tzapu/WiFiManager
-// new MQTT
-// #include <PubSubClient.h>  // https://github.com/knolleary/pubsubclient
+#include <PubSubClient.h>     // https://github.com/knolleary/pubsubclient
 
 WiFiClient client;  // WiFiManager loads WiFi.h
 Preferences nvConfig;
-// PubSubClient mqtt(espClient);
+PubSubClient mqtt(client);
 
-// MQTT setup
-#include <Adafruit_MQTT.h>
-#include <Adafruit_MQTT_Client.h>
-// Adafruit_MQTT_Client bl_mqtt(&client, MQTT_BROKER, MQTT_PORT, DEVICE_ID, MQTT_USER, MQTT_PASS);
-Adafruit_MQTT_Client bl_mqtt(&client, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASS);
-extern Adafruit_MQTT_Subscribe benchLightSub;
 extern bool mqttConnect();
-extern bool mqttDeviceWiFiUpdate(uint32_t rssi);
-extern bool mqttDeviceLightUpdate(bool status);
-extern uint8_t mqttBenchLightMessage();
+extern void mqttPublish(const char* topic, const String& payload);
 
 // Global variables
 // timers
@@ -35,7 +26,7 @@ uint32_t timeLastFaceSeenMS = 0;
 uint32_t timeResetPressStartMS = 0;
 
 // in config.h
-struct MqttConfig mqttConfig;
+struct MqttConfig mqttBrokerConfig;
 struct networkEndpointConfig endpointPath; 
 
 bool faceSeen = false;
@@ -57,61 +48,57 @@ void setup() {
   loadNVConfig();
 
   if (openWiFiManager()) {
-    // new MQTT 
+    // setup MQTT
     // mqtt.setCallback(mqttMessageCallback);
-    // mqtt.setServer(cfg.host.c_str(), cfg.port);
+    mqttConnect();
 
-    mqttDeviceWiFiUpdate(abs(WiFi.RSSI()));
-    bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
+    // publish new WiFi RSSI to MQTT
+    const char* topic = generateMQTTTopic(VALUE_KEY_RSSI);
+    mqttPublish(topic, String(abs(WiFi.RSSI())));
+
+    // subscribe to MQTT broker light topic
+    // bl_mqtt.subscribe(&benchLightSub); // IMPROVEMENT: Should this be also implemented in loop() in case WiFi connection is established later?
   }
 }
 
 void loop() {
   checkResetLongPress();  // Always watching for long-press to wipe
 
-// if (wifiManager.getWiFiIsSaved()) 
-//   wifiManager.setEnableConfigPortal(false); 
-// wifiManager.autoConnect("benchLight AP");
+  // if (wifiManager.getWiFiIsSaved()) 
+  //   wifiManager.setEnableConfigPortal(false); 
+  // wifiManager.autoConnect("benchLight AP");
 
-  // new MQTT 
-  //   // Maintain MQTT connection
-  // if (!mqtt.connected()) {
-  //   unsigned long now = millis();
-  //   if (now - lastMqttAttempt > MQTT_RECONNECT_MS) {
-  //     lastMqttAttempt = now;
-  //     mqttConnect();
-  //   }
-  // } else {
-  //   mqtt.loop();
-  // }
-
-  // // Example: publish every 5 seconds when connected
-  // static unsigned long lastPub = 0;
-  // if (mqtt.connected() && millis() - lastPub > 5000) {
-  //   lastPub = millis();
-  //   mqttPublish(cfg.topicPub.c_str(), "hello from ESP32");
-  // }
-
-  // is there a MQTT message to process?
-  if (mqttConnect())
-  {
-    // BLOCKING code; check to see if there is a status change for the light
-    uint8_t status = mqttBenchLightMessage();
-
-    if (status != 2) { // 2 is no message received 
-      debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
-      digitalWrite(hardwareRelayPin, status);
-      if (!status)
-        faceSeen = false; // allows for a person to be detected after a remote override of light state
+  // Maintain MQTT connection
+  if (!mqtt.connected()) {
+    unsigned long now = millis();
+    if (now - timeLastMQTTPingMS > timeMQTTKeepAliveIntervalMS) {
+      timeLastMQTTPingMS = now;
+      mqttConnect();
     }
-    // Question : Do we need to ping the server if we are already querying it regularly?
-    // if(! bl_mqtt.ping()) {
-    //   mqtt.disconnect();
+  } else {
+    mqtt.loop();
   }
-  else
-  {
-    // error; not sure how to handle
-  }
+
+  // is there a MQTT topic change to process?
+  // if (mqttConnect())
+  // {
+  //   // BLOCKING code; check to see if there is a status change for the light
+  //   uint8_t status = mqttBenchLightMessage();
+
+  //   if (status != 2) { // 2 is no message received 
+  //     debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
+  //     digitalWrite(hardwareRelayPin, status);
+  //     if (!status)
+  //       faceSeen = false; // allows for a person to be detected after a remote override of light state
+  //   }
+  //   // Question : Do we need to ping the server if we are already querying it regularly?
+  //   // if(! bl_mqtt.ping()) {
+  //   //   mqtt.disconnect();
+  // }
+  // else
+  // {
+  //   // error; not sure how to handle
+  // }
 
   // BUG : Because of the blocking MQTT code, this always gets triggered unless sensorSampleIntervalMS > mqttSubSampleIntervalMS
   // is it time to look for a face?
@@ -136,7 +123,8 @@ void loop() {
         }
         if (!faceSeen) {
           digitalWrite(hardwareRelayPin, HIGH);
-          mqttDeviceLightUpdate(true);
+          const char* lightTopic = generateMQTTTopic(VALUE_KEY_LIGHT);
+          mqttPublish(lightTopic, String(true));
         }
         faceSeen = true;
         timeLastFaceSeenMS = millis();
@@ -149,7 +137,8 @@ void loop() {
   if (((millis() - timeLastFaceSeenMS) > faceDetectTimeoutWindowMS) && (faceSeen)) {
     debugMessage(String("No face seen in ") + (faceDetectTimeoutWindowMS/1000) + " seconds, turning off light",1);
     digitalWrite(hardwareRelayPin, LOW);
-    mqttDeviceLightUpdate(false);
+    const char* lightTopic = generateMQTTTopic(VALUE_KEY_LIGHT);
+    mqttPublish(lightTopic, String(false));
     faceSeen = false;
   }
 }
@@ -177,15 +166,16 @@ bool openWiFiManager()
   #endif
   wfm.setConnectTimeout(180);
 
-  wfm.setTitle("benchLight setup");
+  String titleText = hardwareDeviceType + " setup";
+  wfm.setTitle(titleText);
   // hint text (optional)
   //WiFiManagerParameter hint_text("<small>*If you want to connect to already connected AP, leave SSID and password fields empty</small>");
   
   // collect MQTT and device parameters while in AP mode
-  // WiFiManagerParameter mqttBroker("mqttBroker","MQTT broker address",defaultMQTTBroker.c_str(),30);;
-  // WiFiManagerParameter mqttPort("mqttPort", "MQTT broker port", defaultMQTTPort, 5);
-  // WiFiManagerParameter mqttUser("mqttUser", "MQTT username", defaultMQTTUser.c_str(), 20);
-  // WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", defaultMQTTPassword.c_str(), 20);
+  WiFiManagerParameter mqttBroker("mqttBroker","MQTT broker address",defaultMQTTBroker.c_str(),30);;
+  WiFiManagerParameter mqttPort("mqttPort", "MQTT broker port", defaultMQTTPort.c_str(), 5);
+  WiFiManagerParameter mqttUser("mqttUser", "MQTT username", defaultMQTTUser.c_str(), 20);
+  WiFiManagerParameter mqttPassword("mqttPassword", "MQTT user password", defaultMQTTPassword.c_str(), 20);
 
   // collect parameters used to build network endpoint paths
   WiFiManagerParameter deviceSite("deviceSite", "device site", defaultSite.c_str(), 20);
@@ -193,12 +183,12 @@ bool openWiFiManager()
   WiFiManagerParameter deviceRoom("deviceRoom", "what room is the device in", defaultRoom.c_str(), 20);
   WiFiManagerParameter deviceID("deviceID", "unique name for device", defaultDeviceID.c_str(), 30);
  
-  // order determines on-screen order
-  //wfm.addParameter(&hint_text);
-  // wfm.addParameter(&mqttBroker);
-  // wfm.addParameter(&mqttPort);
-  // wfm.addParameter(&mqttUser);
-  // wfm.addParameter(&mqttPassword);
+  //order determines on-screen order
+  // wfm.addParameter(&hint_text);
+  wfm.addParameter(&mqttBroker);
+  wfm.addParameter(&mqttPort);
+  wfm.addParameter(&mqttUser);
+  wfm.addParameter(&mqttPassword);
 
   wfm.addParameter(&deviceSite);
   wfm.addParameter(&deviceLocation);
@@ -220,11 +210,10 @@ bool openWiFiManager()
       endpointPath.room = deviceRoom.getValue();
       endpointPath.deviceID = deviceID.getValue();
 
-      // new MQTT
-      // mqttBrokerConfig.host     = mqttBroker.getValue();
-      // mqttBrokerConfig.port     = (uint16_t)strtoul(mqttPort.getValue(), nullptr, 10);
-      // mqttBrokerConfig.user     = mqttUser.getValue();
-      // mqttBrokerConfig.pass     = mqttPassword.getValue();
+      mqttBrokerConfig.host     = mqttBroker.getValue();
+      mqttBrokerConfig.port     = (uint16_t)strtoul(mqttPort.getValue(), nullptr, 10);
+      mqttBrokerConfig.user     = mqttUser.getValue();
+      mqttBrokerConfig.password = mqttPassword.getValue();
 
       saveNVConfig();
       saveWFMConfig = false;
@@ -248,17 +237,22 @@ void loadNVConfig() {
   endpointPath.deviceID = nvConfig.getString("deviceID", defaultDeviceID);
   debugMessage(String("Device ID is ") + endpointPath.deviceID,1);
 
-  // new MQTT
-  // mqttBrokerConfig.host     = nvConfig.getString("host", defaultMQTTBroker);
-  // mqttBrokerConfig.port     = nvConfig.getUShort("port", defaultMQTTPort);
-  // mqttBrokerConfig.user     = nvConfig.getString("user", defaultMQTTUser);
-  // mqttBrokerConfig.password = nvConfig.getString("password", defaultMQTTPassword);
+  mqttBrokerConfig.host     = nvConfig.getString("host", defaultMQTTBroker);
+  debugMessage(String("MQTT broker is ") + mqttBrokerConfig.host,2);
+  // FIX THIS: Just putting a bandaid on this so I can work on the bigger shit
+  // mqttBrokerConfig.port     = nvConfig.getUShort("port", ((uint16_t)strtoul(defaultMQTTPort, nullptr, 10)));
+  mqttBrokerConfig.port     = nvConfig.getUShort("port", 1883);
+  debugMessage(String("MQTT broker port is ") + mqttBrokerConfig.port,2);
+  mqttBrokerConfig.user     = nvConfig.getString("user", defaultMQTTUser);
+  debugMessage(String("MQTT username is ") + mqttBrokerConfig.user,2);
+  mqttBrokerConfig.password = nvConfig.getString("password", defaultMQTTPassword);
+  debugMessage(String("MQTT user password is ") + mqttBrokerConfig.password,2);
+
   nvConfig.end();
   debugMessage("loadNVConfig end",2);
 }
 
 void saveNVConfig()
-//void saveNVConfig(const MqttConfig& config)
 // copy new config data to non-volatile storage
 {
   debugMessage("saveNVConfig begin",2);
@@ -269,11 +263,10 @@ void saveNVConfig()
   nvConfig.putString("room", endpointPath.room);
   nvConfig.putString("deviceID", endpointPath.deviceID);
 
-  // new MQTT
-  // nvConfig.putString("host",  mqttBrokerConfig.host);
-  // nvConfig.putUShort("port",  mqttBrokerConfig.port);
-  // nvConfig.putString("user",  mqttBrokerConfig.user);
-  // nvConfig.putString("password",  mqttBrokerConfig.password);
+  nvConfig.putString("host",  mqttBrokerConfig.host);
+  nvConfig.putUShort("port",  mqttBrokerConfig.port);
+  nvConfig.putString("user",  mqttBrokerConfig.user);
+  nvConfig.putString("password",  mqttBrokerConfig.password);
 
   nvConfig.end();
   debugMessage("saveNVConfig end",2);
@@ -316,6 +309,16 @@ void checkResetLongPress() {
       timeResetPressStartMS = 0; // reset button press timer
     }
   }
+}
+
+const char* generateMQTTTopic(String key)
+// Utility function to streamline dynamically generating MQTT topics using site and device 
+// parameters defined in config.h and our standard naming scheme using values set in secrets.h
+{
+  String topic = endpointPath.site + "/" + endpointPath.location + "/" + endpointPath.room +
+          "/" + hardwareDeviceType + "/" + endpointPath.deviceID + "/" + key;
+  debugMessage(String("Generated MQTT topic: ") + topic,2);
+  return(topic.c_str());
 }
 
 void debugMessage(String messageText, uint8_t messageLevel)
