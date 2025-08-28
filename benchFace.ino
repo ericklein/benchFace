@@ -19,6 +19,7 @@ extern bool mqttConnect();
 extern void mqttPublish(const char* topic, const String& payload);
 extern void mqttSubscribe(const char* topic);
 extern void mqttMessageCallback(char* topic, byte* payload, unsigned int length);
+extern const char* generateMQTTTopic(String key);
 
 // Global variables
 // timers
@@ -289,16 +290,6 @@ void checkResetLongPress() {
       timeResetPressStartMS = 0; // reset button press timer
     }
   }
-}
-
-const char* generateMQTTTopic(String key)
-// Utility function to streamline dynamically generating MQTT topics using site and device 
-// parameters defined in config.h and our standard naming scheme using values set in secrets.h
-{
-  String topic = endpointPath.site + "/" + endpointPath.location + "/" + endpointPath.room +
-          "/" + hardwareDeviceType + "/" + endpointPath.deviceID + "/" + key;
-  debugMessage(String("Generated MQTT topic: ") + topic,2);
-  return(topic.c_str());
 }
 
 void debugMessage(String messageText, uint8_t messageLevel)

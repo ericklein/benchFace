@@ -12,12 +12,21 @@
 
 // required external functions and data structures
 extern void debugMessage(String messageText, uint8_t messageLevel);
-extern const char* generateMQTTTopic(String key);
 extern bool faceSeen;
 
 // MQTT setup
 #include <PubSubClient.h>
 extern PubSubClient mqtt;
+
+const char* generateMQTTTopic(String key)
+// Utility function to streamline dynamically generating MQTT topics using site and device 
+// parameters defined in config.h and our standard naming scheme using values set in secrets.h
+{
+  String topic = endpointPath.site + "/" + endpointPath.location + "/" + endpointPath.room +
+          "/" + hardwareDeviceType + "/" + endpointPath.deviceID + "/" + key;
+  debugMessage(String("Generated MQTT topic: ") + topic,2);
+  return(topic.c_str());
+}
 
 void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
   debugMessage(String("new topic from broker ") + topic, 1);
@@ -49,9 +58,9 @@ bool mqttConnect() {
   }
 
   if (connected) {
-    debugMessage("MQTT connected",1);
+    debugMessage(String("Connected to MQTT broker ") + mqttBrokerConfig.host,1);
   } else {
-    Serial.printf("MQTT connect failed, rc=%d\n", mqtt.state());
+    debugMessage(String("MQTT connection to ") + mqttBrokerConfig.host + " failed, rc=" + mqtt.state(),1);
   }
   return connected;
 }
@@ -59,11 +68,11 @@ bool mqttConnect() {
 void mqttPublish(const char* topic, const String& payload) {
   if (!mqtt.connected()) return;
   mqtt.publish(topic, payload.c_str());
-  // Serial.printf("[MQTT OUT] %s => %s\n", topic, payload.c_str());
+  debugMessage(String("MQTT publish topic is ") + topic + ", message is " + payload,2);
 }
 
 void mqttSubscribe(const char* topic) {
   if (!mqtt.connected()) return;
   mqtt.subscribe(topic);
-  Serial.printf("[MQTT SUB] %s\n", topic);
+  debugMessage(String("Now subscribed to ") + topic,2);
 }
