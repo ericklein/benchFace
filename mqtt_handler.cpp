@@ -12,114 +12,67 @@
 
 // required external functions and data structures
 extern void debugMessage(String messageText, uint8_t messageLevel);
-
-const uint8_t networkConnectAttemptLimit = 3;
-
-// Status variables shared across various functions
+extern bool faceSeen;
 
 // MQTT setup
-#include <Adafruit_MQTT.h>
-#include <Adafruit_MQTT_Client.h>
-extern Adafruit_MQTT_Client bl_mqtt;
-Adafruit_MQTT_Subscribe benchLightSub = Adafruit_MQTT_Subscribe(&bl_mqtt, MQTT_SUB_TOPIC);
+#include <PubSubClient.h>
+extern PubSubClient mqtt;
 
-bool mqttConnect()
-// Connects and reconnects to MQTT broker, call as needed to maintain connection
-{
-  // exit if already connected
-  if (bl_mqtt.connected())
-  {
-    debugMessage(String("Already connected to MQTT broker ") + MQTT_BROKER,2);
-    return true;
-  }
-
-  // Q: does this need to be signed?
-  int8_t mqttErr;
-
-  for(uint8_t loop = 1; loop <= networkConnectAttemptLimit; loop++)
-  {
-    if ((mqttErr = bl_mqtt.connect()) == 0)
-    {
-      debugMessage(String("Connected to MQTT broker ") + MQTT_BROKER,1);
-      return true;
-    }
-
-    // report problem
-    bl_mqtt.disconnect();
-    debugMessage(String("MQTT connection attempt ") + loop + " of " + networkConnectAttemptLimit + " failed with error msg: " + bl_mqtt.connectErrorString(mqttErr),1);
-    delay(timeNetworkConnectTimeoutMS);
-  }
-  // MQTT connection did not happen after multiple attempts
-  return false;
-} 
-
-String generateTopic(char *key)
+const char* generateMQTTTopic(String key)
 // Utility function to streamline dynamically generating MQTT topics using site and device 
 // parameters defined in config.h and our standard naming scheme using values set in secrets.h
 {
-  String topic;
-  topic = String(DEVICE_SITE) + "/" + String(DEVICE_LOCATION) + "/" + String(DEVICE_ROOM) +
-          "/" + String(DEVICE) + "/" + String(DEVICE_ID) + "/" + String(key);
+  String topic = endpointPath.site + "/" + endpointPath.location + "/" + endpointPath.room +
+          "/" + hardwareDeviceType + "/" + endpointPath.deviceID + "/" + key;
   debugMessage(String("Generated MQTT topic: ") + topic,2);
-  return(topic);
+  return(topic.c_str());
 }
 
-  bool mqttDeviceWiFiUpdate(uint8_t rssi)
-  {
-    bool result = false;
-    if (rssi!=0)
-    {
-      String topic;
-      topic = generateTopic(VALUE_KEY_RSSI);  // Generate topic using config.h and secrets.h parameters
-      // add ,MQTT_QOS_1); if problematic, remove QOS parameter
-      Adafruit_MQTT_Publish rssiLevelPub = Adafruit_MQTT_Publish(&bl_mqtt, topic.c_str());
-      
-      mqttConnect();
-
-      if (rssiLevelPub.publish((uint32_t)rssi)) // explicitly cast due to compiler ambiguity
-      {
-        debugMessage("MQTT publish: WiFi RSSI succeeded",2);
-        result = true;
-      }
-      else
-      {
-        debugMessage("MQTT publish: WiFi RSSI failed",2);
-      }
-    }
-    return(result);
+void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
+  debugMessage(String("new topic from broker ") + topic, 1);
+  const char* targetTopic = generateMQTTTopic(VALUE_KEY_LIGHT);
+  if (strcmp(targetTopic, topic) == 0) {
+    String message;
+    message.reserve(length);
+    for (unsigned int loop = 0; loop < length; loop++) message += (char)payload[loop];
+    uint8_t status = message.toInt();
+    debugMessage(String("MQTT; change light to ") + (status == 1 ? "On" : "Off"),1);
+    digitalWrite(hardwareRelayPin, status);
+    if (!status)
+      faceSeen = false; // allows for a person to be detected after a remote override of light state
   }
+}
 
-bool mqttDeviceLightUpdate(bool status)
-{
-  String topic;
-  topic = generateTopic(VALUE_KEY_LIGHT);  // Generate topic using config.h and secrets.h parameters
-  // add ,MQTT_QOS_1); if problematic, remove QOS parameter
-  Adafruit_MQTT_Publish lightPub = Adafruit_MQTT_Publish(&bl_mqtt, topic.c_str());
-  
-  mqttConnect();
-
-  if (lightPub.publish((uint32_t)status))
-  {
-    debugMessage("MQTT publish: light status succeeded",1);
-    return true;
-  }
-  else
-  {
-    debugMessage("MQTT publish: light status failed",1);
+bool mqttConnect() {
+  if (mqttBrokerConfig.host.isEmpty() || mqttBrokerConfig.port == 0)
     return false;
+
+  mqtt.setServer(mqttBrokerConfig.host.c_str(), mqttBrokerConfig.port);
+  // Serial.printf("Connecting to MQTT %s:%u ...\n", mqttBrokerConfig.host.c_str(), mqttBrokerConfig.port);
+
+  bool connected;
+  if (mqttBrokerConfig.user.length() > 0) {
+    connected = mqtt.connect(endpointPath.deviceID.c_str(), mqttBrokerConfig.user.c_str(), mqttBrokerConfig.password.c_str());
+  } else {
+    connected = mqtt.connect(endpointPath.deviceID.c_str());
   }
+
+  if (connected) {
+    debugMessage(String("Connected to MQTT broker ") + mqttBrokerConfig.host,1);
+  } else {
+    debugMessage(String("MQTT connection to ") + mqttBrokerConfig.host + " failed, rc=" + mqtt.state(),1);
+  }
+  return connected;
 }
 
-uint8_t mqttBenchLightMessage()
-{
-  Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = bl_mqtt.readSubscription(5000))) 
-  {
-    if (subscription == &benchLightSub)
-    {
-      debugMessage(String("Received '") + ((char *)benchLightSub.lastread) + "' from " + MQTT_SUB_TOPIC,1); 
-      return (atol((char *)benchLightSub.lastread) == 1) ? 1 : 0;
-    }
-  }
-  return 2;  // 2 indicates no message received
+void mqttPublish(const char* topic, const String& payload) {
+  if (!mqtt.connected()) return;
+  mqtt.publish(topic, payload.c_str());
+  debugMessage(String("MQTT publish topic is ") + topic + ", message is " + payload,2);
+}
+
+void mqttSubscribe(const char* topic) {
+  if (!mqtt.connected()) return;
+  mqtt.subscribe(topic);
+  debugMessage(String("Now subscribed to ") + topic,2);
 }

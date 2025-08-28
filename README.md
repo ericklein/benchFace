@@ -1,5 +1,5 @@
 # benchFace
-trigger bench light using vision ML or MQTT trigger
+toggle bench light using vision ML or MQTT message
 
 ## Purpose
 benchLight was designed so that when I sit down at my lab bench, the overhead light immediately turns on. When I walk away, it will turn off after a predefined delay. I'm lazy.
@@ -38,7 +38,6 @@ ESP32 MCU, i2c, and one GPIO pin.
 - [Github Issues](https://github.com/ericklein/benchFace/issues)
 
 ## .plan (big ticket items)
-- [WiFI Manager](https://github.com/tzapu/WiFiManager) support
 - OTA firmware update support
 - transition to individual face recognition
 - Home Assistant integration via HassioMQTT

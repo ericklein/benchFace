@@ -7,18 +7,37 @@
 
 // Configuration Step 2: Set debug parameters
 // comment out to turn off; 1 = summary, 2 = verbose
-// #define DEBUG 2
+#define DEBUG 2
+
+struct MqttConfig {
+  String host;
+  uint16_t port;
+  String user;
+  String password;
+};
+extern struct MqttConfig mqttBrokerConfig;
+
+struct networkEndpointConfig {
+  String site;
+  String location;
+  String room;
+  String deviceID;
+};
+extern struct networkEndpointConfig endpointPath;
 
 // Configuration variables that change rarely
 
-// Network timers
+// timers
 const uint32_t timeMQTTKeepAliveIntervalMS = 300000; // ping MQTT broker every 300 seconds to keep alive
-const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
-const uint32_t timeNetworkConnectTimeoutMS = 10000;
+// const uint32_t timeWiFiKeepAliveIntervalMS = 30000; // Retry every 30 seconds
+const uint32_t timeNetworkConnectTimeoutMS = 10000; // used by network endpoint code
 
-// How long to wait between reading the sensor. The sensor can be read as
-// frequently as you like, but the results only change at about 5FPS
-const uint32_t sensorSampleIntervalMS = 5000;
+const uint8_t networkConnectAttemptLimit = 3; // used by network endpoint code
+
+// sample rates
+// How long to wait people sensor reads. Results only change ~ 5FPS
+const uint32_t sensorSampleIntervalMS = 2000;
+const uint16_t mqttSubSampleIntervalMS = 2000;
 
 #ifdef DEBUG
   const uint32_t faceDetectTimeoutWindowMS = 30000;
@@ -26,7 +45,12 @@ const uint32_t sensorSampleIntervalMS = 5000;
   const uint32_t faceDetectTimeoutWindowMS = 300000;
 #endif
 
-// Hardware
+// hardware
+const String hardwareDeviceType = "benchLight";
 
 // relay featherwing
 const uint8_t hardwareRelayPin = 12;
+
+// button
+const uint8_t hardwareWipeButton = 38; // second button on Adafruit Feather ESP32V2 board
+const uint16_t timeResetButtonHoldMS = 10000; // Long-press duration to wipe config
