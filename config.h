@@ -9,22 +9,6 @@
 // comment out to turn off; 1 = summary, 2 = verbose
 #define DEBUG 2
 
-struct MqttConfig {
-  String host;
-  uint16_t port;
-  String user;
-  String password;
-};
-extern struct MqttConfig mqttBrokerConfig;
-
-struct networkEndpointConfig {
-  String site;
-  String location;
-  String room;
-  String deviceID;
-};
-extern struct networkEndpointConfig endpointPath;
-
 // Configuration variables that change rarely
 
 // timers

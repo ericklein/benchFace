@@ -9,14 +9,15 @@
 #include "config.h"
 // private credentials for network, MQTT, weather provider
 #include "secrets.h"
-
-// required external functions and data structures
-extern void debugMessage(String messageText, uint8_t messageLevel);
-extern bool faceSeen;
+#include "benchFace.h"
 
 // MQTT setup
 #include <PubSubClient.h>
 extern PubSubClient mqtt;
+
+// required external functions and data structures
+extern void debugMessage(String messageText, uint8_t messageLevel);
+extern bool faceSeen;
 
 const char* generateMQTTTopic(String key)
 // Utility function to streamline dynamically generating MQTT topics using site and device 

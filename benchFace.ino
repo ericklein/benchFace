@@ -3,6 +3,7 @@
   Description:    toggle (bench) light via CV or MQTT message
 */
 
+#include "benchFace.h"        // core data definitions across files
 #include "config.h"           // hardware and internet configuration parameters
 #include "secrets.h"          // private credentials for network, MQTT
 #include <Wire.h>             
@@ -28,9 +29,8 @@ uint32_t timeLastSensorSampleMS = 0;
 uint32_t timeLastFaceSeenMS = 0;
 uint32_t timeResetPressStartMS = 0;
 
-// in config.h
-struct MqttConfig mqttBrokerConfig;
-struct networkEndpointConfig endpointPath; 
+MqttConfig mqttBrokerConfig;
+networkEndpointConfig endpointPath;
 
 bool faceSeen = false;
 bool saveWFMConfig = false;
