@@ -5,11 +5,9 @@
 
 #include "Arduino.h"
 
-// hardware and internet configuration parameters
-#include "config.h"
-// private credentials for network, MQTT, weather provider
-#include "secrets.h"
 #include "benchFace.h"
+#include "config.h"   // hardware and internet configuration parameters
+#include "secrets.h"  // private credentials for network, MQTT, weather provider
 
 // MQTT setup
 #include <PubSubClient.h>
@@ -66,10 +64,18 @@ bool mqttConnect() {
   return connected;
 }
 
-void mqttPublish(const char* topic, const String& payload) {
-  if (!mqtt.connected()) return;
-  mqtt.publish(topic, payload.c_str());
-  debugMessage(String("MQTT publish topic is ") + topic + ", message is " + payload,2);
+bool mqttPublish(const char* topic, const String& payload) {
+  bool success = false;
+
+  if (mqtt.connected()) {
+    if (mqtt.publish(topic, payload.c_str())) {
+      success = true;
+      debugMessage(String("MQTT publish topic is ") + topic + ", message is " + payload,2);
+    }
+    else
+      debugMessage(String("MQTT publish to topic ") + topic + " failed",1);
+  }
+  return success;
 }
 
 void mqttSubscribe(const char* topic) {

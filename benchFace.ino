@@ -23,11 +23,7 @@ extern void mqttMessageCallback(char* topic, byte* payload, unsigned int length)
 extern const char* generateMQTTTopic(String key);
 
 // Global variables
-// timers
-uint32_t timeLastMQTTPingMS = 0; 
-uint32_t timeLastSensorSampleMS = 0;
-uint32_t timeLastFaceSeenMS = 0;
-uint32_t timeResetPressStartMS = 0;
+uint32_t timeResetPressStartMS = 0; // IMPROVEMENT: Move this as static to CheckResetLongPress()
 
 MqttConfig mqttBrokerConfig;
 networkEndpointConfig endpointPath;
@@ -66,13 +62,18 @@ void setup() {
 }
 
 void loop() {
+  static uint32_t timeLastMQTTPingMS = 0;
+  static uint32_t timeLastSensorSampleMS = 0;
+  static uint32_t timeLastFaceSeenMS = 0;
+
+
   checkResetLongPress();  // Always watching for long-press to wipe
 
   // if (wifiManager.getWiFiIsSaved()) 
   //   wifiManager.setEnableConfigPortal(false); 
   // wifiManager.autoConnect("benchLight AP");
 
-  // Maintain MQTT connection
+  // reestablish MQTT connection if needed else check for subscription update
   if (!mqtt.connected()) {
     unsigned long now = millis();
     if (now - timeLastMQTTPingMS > timeMQTTKeepAliveIntervalMS) {
@@ -143,7 +144,7 @@ bool openWiFiManager()
   wfm.setSaveConfigCallback(saveConfigCallback);
   wfm.setHostname(endpointPath.deviceID.c_str());
   #ifndef DEBUG
-    wfm.SetDebugOutput(false);
+    wfm.setDebugOutput(false);
   #endif
   wfm.setConnectTimeout(180);
 
